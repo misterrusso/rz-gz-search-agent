@@ -14,7 +14,8 @@ Local Go service for procurement checks: find lots, download spec files, extract
   - `memory`
 - OWS integration:
   - GraphQL client with flexible response parsing
-  - Fake provider for local mode (`DRY_RUN=true` or empty `OWS_GRAPHQL_URL`)
+  - Explicit provider mode via `GOSZAKUP_MODE=fake|real` (default `real`)
+  - No automatic fallback to fake in `real` mode
 - File support:
   - PDF text extraction (text-based PDF only)
   - DOCX text extraction (main document + headers/footers)
@@ -47,6 +48,7 @@ curl -X POST http://localhost:8080/jobs/check
 
 - `OWS_TOKEN`
 - `OWS_GRAPHQL_URL`
+- `GOSZAKUP_MODE` (`fake` or `real`, default `real`)
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `TELEGRAM_BOT_TOKEN`
@@ -60,7 +62,7 @@ curl -X POST http://localhost:8080/jobs/check
 - `HTTP_TIMEOUT_SECONDS`
 - `OPENAI_MAX_TEXT_CHARS`
 - `TELEGRAM_ENABLED`
-- `DRY_RUN`
+- `DRY_RUN` (controls safe local behavior like fake classifier, but does not choose OWS provider)
 
 ## OWS Integration Assumptions
 

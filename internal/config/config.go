@@ -10,6 +10,7 @@ import (
 type Config struct {
 	OWSToken            string
 	OWSGraphQLURL       string
+	GoszakupMode        string
 	OpenAIAPIKey        string
 	OpenAIModel         string
 	TelegramBotToken    string
@@ -30,6 +31,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		OWSToken:            strings.TrimSpace(os.Getenv("OWS_TOKEN")),
 		OWSGraphQLURL:       strings.TrimSpace(os.Getenv("OWS_GRAPHQL_URL")),
+		GoszakupMode:        strings.ToLower(getOrDefault("GOSZAKUP_MODE", "real")),
 		OpenAIAPIKey:        strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 		OpenAIModel:         getOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 		TelegramBotToken:    strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
@@ -54,6 +56,9 @@ func Load() (Config, error) {
 	}
 	if cfg.StateBackend != "sqlite" && cfg.StateBackend != "memory" {
 		return Config{}, errors.New("STATE_BACKEND must be sqlite or memory")
+	}
+	if cfg.GoszakupMode != "fake" && cfg.GoszakupMode != "real" {
+		return Config{}, errors.New("GOSZAKUP_MODE must be fake or real")
 	}
 
 	return cfg, nil
@@ -108,4 +113,3 @@ func parseBoolWithDefault(key string, fallback bool) bool {
 	}
 	return b
 }
-

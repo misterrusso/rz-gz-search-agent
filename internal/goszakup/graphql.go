@@ -106,6 +106,9 @@ func (g *GraphQLClient) DownloadDocument(ctx context.Context, doc model.Document
 }
 
 func (g *GraphQLClient) query(ctx context.Context, query string, variables map[string]any, out *map[string]any) error {
+	if strings.TrimSpace(g.url) == "" {
+		return fmt.Errorf("ows graphql url is empty")
+	}
 	reqBody := map[string]any{
 		"query":     query,
 		"variables": variables,
@@ -305,4 +308,3 @@ func dedupDocs(items []model.DocumentRef) []model.DocumentRef {
 func errorsf(format string, args ...any) error {
 	return fmt.Errorf(format, args...)
 }
-

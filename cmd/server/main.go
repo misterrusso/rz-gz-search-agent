@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,7 +40,11 @@ func main() {
 		}
 	}()
 
-	owsClient := buildOWSClient(cfg, logger)
+	owsClient, err := buildOWSClient(cfg, logger)
+	if err != nil {
+		logger.Error("failed to initialize OWS client", "error", err.Error(), "goszakup_mode", cfg.GoszakupMode)
+		os.Exit(1)
+	}
 	classifier := buildClassifier(cfg, logger)
 	tgClient := telegram.NewBotClient(
 		cfg.TelegramBotToken,
@@ -69,12 +74,20 @@ func buildStore(cfg config.Config) (state.Store, error) {
 	return state.NewSQLiteStore(cfg.SQLitePath)
 }
 
-func buildOWSClient(cfg config.Config, logger *slog.Logger) goszakup.Client {
-	if cfg.DryRun || cfg.OWSGraphQLURL == "" {
-		logger.Info("using fake OWS provider", "dry_run", cfg.DryRun, "ows_graphql_url_empty", cfg.OWSGraphQLURL == "")
-		return goszakup.NewFakeClient()
+func buildOWSClient(cfg config.Config, logger *slog.Logger) (goszakup.Client, error) {
+	switch cfg.GoszakupMode {
+	case "fake":
+		logger.Info("using fake OWS provider", "goszakup_mode", cfg.GoszakupMode)
+		return goszakup.NewFakeClient(), nil
+	case "real":
+		if cfg.OWSGraphQLURL == "" {
+			return nil, errors.New("OWS_GRAPHQL_URL is required when GOSZAKUP_MODE=real")
+		}
+		logger.Info("using real OWS provider", "goszakup_mode", cfg.GoszakupMode, "ows_graphql_url", cfg.OWSGraphQLURL, "ows_token_empty", cfg.OWSToken == "")
+		return goszakup.NewGraphQLClient(cfg.OWSGraphQLURL, cfg.OWSToken, time.Duration(cfg.HTTPTimeoutSeconds)*time.Second), nil
+	default:
+		return nil, fmt.Errorf("unsupported GOSZAKUP_MODE: %s", cfg.GoszakupMode)
 	}
-	return goszakup.NewGraphQLClient(cfg.OWSGraphQLURL, cfg.OWSToken, time.Duration(cfg.HTTPTimeoutSeconds)*time.Second)
 }
 
 func buildClassifier(cfg config.Config, logger *slog.Logger) service.Classifier {
@@ -97,4 +110,3 @@ func waitShutdown(logger *slog.Logger, srv *httpapi.Server) {
 		logger.Error("server shutdown failed", "error", err.Error())
 	}
 }
-
