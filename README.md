@@ -49,6 +49,7 @@ curl -X POST http://localhost:8080/jobs/check
 - `OWS_TOKEN`
 - `OWS_GRAPHQL_URL`
 - `GOSZAKUP_MODE` (`fake` or `real`, default `real`)
+- `OWS_QUERY_MODE` (`minimal` or `normal`, default `normal`)
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `TELEGRAM_BOT_TOKEN`
@@ -71,6 +72,7 @@ MVP includes placeholder GraphQL templates and flexible parsing in `internal/gos
 - Query templates:
   - `TrdBuy(filter, limit, after)` for procurement search
   - `Lots(filter, limit, after)` for document lookup
+- In `OWS_QUERY_MODE=minimal`, search uses minimal query `TrdBuy(limit: $limit) { id }`.
 - `TODO` is used only where exact OWS schema is required.
 - Before connecting to a real OWS instance, adapt:
   - query names and field names

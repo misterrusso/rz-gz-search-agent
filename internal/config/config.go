@@ -11,6 +11,7 @@ type Config struct {
 	OWSToken            string
 	OWSGraphQLURL       string
 	GoszakupMode        string
+	OWSQueryMode        string
 	OpenAIAPIKey        string
 	OpenAIModel         string
 	TelegramBotToken    string
@@ -32,6 +33,7 @@ func Load() (Config, error) {
 		OWSToken:            strings.TrimSpace(os.Getenv("OWS_TOKEN")),
 		OWSGraphQLURL:       strings.TrimSpace(os.Getenv("OWS_GRAPHQL_URL")),
 		GoszakupMode:        strings.ToLower(getOrDefault("GOSZAKUP_MODE", "real")),
+		OWSQueryMode:        strings.ToLower(getOrDefault("OWS_QUERY_MODE", "normal")),
 		OpenAIAPIKey:        strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 		OpenAIModel:         getOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 		TelegramBotToken:    strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
@@ -59,6 +61,9 @@ func Load() (Config, error) {
 	}
 	if cfg.GoszakupMode != "fake" && cfg.GoszakupMode != "real" {
 		return Config{}, errors.New("GOSZAKUP_MODE must be fake or real")
+	}
+	if cfg.OWSQueryMode != "minimal" && cfg.OWSQueryMode != "normal" {
+		return Config{}, errors.New("OWS_QUERY_MODE must be minimal or normal")
 	}
 
 	return cfg, nil

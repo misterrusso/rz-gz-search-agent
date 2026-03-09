@@ -17,6 +17,9 @@ import (
 )
 
 const (
+	queryModeNormal  = "normal"
+	queryModeMinimal = "minimal"
+
 	searchLotsQuery = `
 query SearchLots($filter: TrdBuyFiltersInput, $limit: Int, $after: Int) {
   TrdBuy(filter: $filter, limit: $limit, after: $after) {
@@ -29,8 +32,8 @@ query SearchLots($filter: TrdBuyFiltersInput, $limit: Int, $after: Int) {
   }
 }`
 	searchLotsMinimalQuery = `
-query SearchLotsMinimal($filter: TrdBuyFiltersInput, $limit: Int, $after: Int) {
-  TrdBuy(filter: $filter, limit: $limit, after: $after) {
+query SearchLotsMinimal($limit: Int) {
+  TrdBuy(limit: $limit) {
     id
   }
 }`
@@ -63,18 +66,23 @@ query GetLotDocumentsAlt($filter: LotsFiltersInput, $limit: Int, $after: Int) {
 type GraphQLClient struct {
 	url        string
 	token      string
+	queryMode  string
 	logger     *slog.Logger
 	httpClient *http.Client
 }
 
-func NewGraphQLClient(url, token string, timeout time.Duration, logger *slog.Logger) *GraphQLClient {
+func NewGraphQLClient(url, token, queryMode string, timeout time.Duration, logger *slog.Logger) *GraphQLClient {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if queryMode != queryModeMinimal {
+		queryMode = queryModeNormal
+	}
 	return &GraphQLClient{
-		url:   url,
-		token: token,
-		logger: logger,
+		url:       url,
+		token:     token,
+		queryMode: queryMode,
+		logger:    logger,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
@@ -86,6 +94,16 @@ func (g *GraphQLClient) SearchLots(ctx context.Context, keywords []string, from 
 	_ = from
 	_ = to
 	var resp map[string]any
+	if g.queryMode == queryModeMinimal {
+		err := g.query(ctx, "SearchLotsMinimal", "TrdBuy", searchLotsMinimalQuery, map[string]any{
+			"limit": limit,
+		}, &resp)
+		if err != nil {
+			return nil, err
+		}
+		return parseLotsFlexible(resp), nil
+	}
+
 	err := g.query(ctx, "SearchLots", "TrdBuy", searchLotsQuery, map[string]any{
 		"filter": nil,
 		"limit":  limit,
@@ -94,9 +112,7 @@ func (g *GraphQLClient) SearchLots(ctx context.Context, keywords []string, from 
 	if err != nil {
 		var fallback map[string]any
 		fallbackErr := g.query(ctx, "SearchLotsMinimal", "TrdBuy", searchLotsMinimalQuery, map[string]any{
-			"filter": nil,
-			"limit":  limit,
-			"after":  0,
+			"limit": limit,
 		}, &fallback)
 		if fallbackErr != nil {
 			return nil, err
