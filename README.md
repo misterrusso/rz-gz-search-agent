@@ -69,8 +69,8 @@ curl -X POST http://localhost:8080/jobs/check
 MVP includes placeholder GraphQL templates and flexible parsing in `internal/goszakup/graphql.go`.
 
 - Query templates:
-  - `searchLots`
-  - `lot(id).documents`
+  - `TrdBuy(filter, limit, after)` for procurement search
+  - `Lots(filter, limit, after)` for document lookup
 - `TODO` is used only where exact OWS schema is required.
 - Before connecting to a real OWS instance, adapt:
   - query names and field names

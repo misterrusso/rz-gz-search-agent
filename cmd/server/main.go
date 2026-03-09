@@ -84,7 +84,7 @@ func buildOWSClient(cfg config.Config, logger *slog.Logger) (goszakup.Client, er
 			return nil, errors.New("OWS_GRAPHQL_URL is required when GOSZAKUP_MODE=real")
 		}
 		logger.Info("using real OWS provider", "goszakup_mode", cfg.GoszakupMode, "ows_graphql_url", cfg.OWSGraphQLURL, "ows_token_empty", cfg.OWSToken == "")
-		return goszakup.NewGraphQLClient(cfg.OWSGraphQLURL, cfg.OWSToken, time.Duration(cfg.HTTPTimeoutSeconds)*time.Second), nil
+		return goszakup.NewGraphQLClient(cfg.OWSGraphQLURL, cfg.OWSToken, time.Duration(cfg.HTTPTimeoutSeconds)*time.Second, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported GOSZAKUP_MODE: %s", cfg.GoszakupMode)
 	}

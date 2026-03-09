@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,22 +18,38 @@ import (
 
 const (
 	searchLotsQuery = `
-query SearchLots($keywords: [String!]!, $from: String!, $to: String!, $limit: Int!) {
-  # TODO: Adapt this query to real OWS GraphQL schema.
-  searchLots(keywords: $keywords, from: $from, to: $to, limit: $limit) {
+query SearchLots($filter: TrdBuyFiltersInput, $limit: Int, $after: Int) {
+  TrdBuy(filter: $filter, limit: $limit, after: $after) {
     id
-    title
-    customer
-    amount
-    currency
-    url
-    publishedAt
+    name
+    customerName
+    sumTruNoNds
+    currencyCode
+    publishDate
+  }
+}`
+	searchLotsMinimalQuery = `
+query SearchLotsMinimal($filter: TrdBuyFiltersInput, $limit: Int, $after: Int) {
+  TrdBuy(filter: $filter, limit: $limit, after: $after) {
+    id
   }
 }`
 	getLotDocumentsQuery = `
-query GetLotDocuments($lotId: ID!) {
-  # TODO: Adapt this query to real OWS GraphQL schema.
-  lot(id: $lotId) {
+query GetLotDocuments($filter: LotsFiltersInput, $limit: Int, $after: Int) {
+  Lots(filter: $filter, limit: $limit, after: $after) {
+    id
+    files {
+      id
+      name
+      url
+      mime
+    }
+  }
+}`
+	getLotDocumentsAltQuery = `
+query GetLotDocumentsAlt($filter: LotsFiltersInput, $limit: Int, $after: Int) {
+  Lots(filter: $filter, limit: $limit, after: $after) {
+    id
     documents {
       id
       name
@@ -45,13 +63,18 @@ query GetLotDocuments($lotId: ID!) {
 type GraphQLClient struct {
 	url        string
 	token      string
+	logger     *slog.Logger
 	httpClient *http.Client
 }
 
-func NewGraphQLClient(url, token string, timeout time.Duration) *GraphQLClient {
+func NewGraphQLClient(url, token string, timeout time.Duration, logger *slog.Logger) *GraphQLClient {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &GraphQLClient{
 		url:   url,
 		token: token,
+		logger: logger,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
@@ -59,24 +82,45 @@ func NewGraphQLClient(url, token string, timeout time.Duration) *GraphQLClient {
 }
 
 func (g *GraphQLClient) SearchLots(ctx context.Context, keywords []string, from time.Time, to time.Time, limit int) ([]model.Lot, error) {
+	_ = keywords
+	_ = from
+	_ = to
 	var resp map[string]any
-	err := g.query(ctx, searchLotsQuery, map[string]any{
-		"keywords": keywords,
-		"from":     from.UTC().Format(time.RFC3339),
-		"to":       to.UTC().Format(time.RFC3339),
-		"limit":    limit,
+	err := g.query(ctx, "SearchLots", "TrdBuy", searchLotsQuery, map[string]any{
+		"filter": nil,
+		"limit":  limit,
+		"after":  0,
 	}, &resp)
 	if err != nil {
-		return nil, err
+		var fallback map[string]any
+		fallbackErr := g.query(ctx, "SearchLotsMinimal", "TrdBuy", searchLotsMinimalQuery, map[string]any{
+			"filter": nil,
+			"limit":  limit,
+			"after":  0,
+		}, &fallback)
+		if fallbackErr != nil {
+			return nil, err
+		}
+		resp = fallback
 	}
 	return parseLotsFlexible(resp), nil
 }
 
 func (g *GraphQLClient) GetLotDocuments(ctx context.Context, lotID string) ([]model.DocumentRef, error) {
+	vars := map[string]any{
+		"filter": map[string]any{"id": lotID},
+		"limit":  1,
+		"after":  0,
+	}
 	var resp map[string]any
-	err := g.query(ctx, getLotDocumentsQuery, map[string]any{"lotId": lotID}, &resp)
+	err := g.query(ctx, "GetLotDocuments", "Lots", getLotDocumentsQuery, vars, &resp)
 	if err != nil {
-		return nil, err
+		var alt map[string]any
+		altErr := g.query(ctx, "GetLotDocumentsAlt", "Lots", getLotDocumentsAltQuery, vars, &alt)
+		if altErr != nil {
+			return nil, err
+		}
+		resp = alt
 	}
 	return parseDocumentsFlexible(resp), nil
 }
@@ -105,10 +149,15 @@ func (g *GraphQLClient) DownloadDocument(ctx context.Context, doc model.Document
 	return data, res.Header.Get("Content-Type"), nil
 }
 
-func (g *GraphQLClient) query(ctx context.Context, query string, variables map[string]any, out *map[string]any) error {
+func (g *GraphQLClient) query(ctx context.Context, operationName, rootField, query string, variables map[string]any, out *map[string]any) error {
 	if strings.TrimSpace(g.url) == "" {
 		return fmt.Errorf("ows graphql url is empty")
 	}
+	g.logger.Info("ows graphql request",
+		"operation", operationName,
+		"root_field", rootField,
+		"variables_keys", variableKeys(variables),
+	)
 	reqBody := map[string]any{
 		"query":     query,
 		"variables": variables,
@@ -153,6 +202,15 @@ func (g *GraphQLClient) query(ctx context.Context, query string, variables map[s
 	return nil
 }
 
+func variableKeys(vars map[string]any) []string {
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func parseLotsFlexible(data map[string]any) []model.Lot {
 	nodes := collectObjectArrayNodes(data)
 	out := make([]model.Lot, 0)
@@ -164,9 +222,9 @@ func parseLotsFlexible(data map[string]any) []model.Lot {
 		published := parseTimeAny(getStringAny(node, "publishedAt", "publishDate", "createdAt"))
 		out = append(out, model.Lot{
 			ID:          id,
-			Title:       getStringAny(node, "title", "name"),
+			Title:       getStringAny(node, "title", "name", "buyName", "numberAnno"),
 			Customer:    getStringAny(node, "customer", "customerName"),
-			Amount:      getFloatAny(node, "amount", "price", "sum"),
+			Amount:      getFloatAny(node, "amount", "price", "sum", "sumTruNoNds"),
 			Currency:    getStringAny(node, "currency", "currencyCode"),
 			URL:         getStringAny(node, "url", "link"),
 			PublishedAt: published,
@@ -182,7 +240,7 @@ func parseDocumentsFlexible(data map[string]any) []model.DocumentRef {
 		id := getStringAny(node, "id", "docId")
 		url := getStringAny(node, "url", "downloadUrl", "href")
 		name := getStringAny(node, "name", "title", "fileName")
-		if id == "" && url == "" {
+		if url == "" {
 			continue
 		}
 		out = append(out, model.DocumentRef{
