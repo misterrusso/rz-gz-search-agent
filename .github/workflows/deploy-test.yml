@@ -1,0 +1,59 @@
+name: Deploy to Cloud Run (TEST)
+
+on:
+  push:
+    branches: ["test"]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build image
+        run: docker build -t "${IMAGE}" .
+
+      - name: Push image
+        run: docker push "${IMAGE}"
+
+      - name: Deploy to Cloud Run TEST
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.IMAGE }}
+          flags: >-
+            --service-account=rz-gz-agent-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+            --no-allow-unauthenticated
+            --memory=512Mi
+            --cpu=1
+            --timeout=300
+            --min-instances=0
+            --max-instances=1
+            --env-vars-file=cloudrun-test-env.yaml
+            --set-secrets=OWS_TOKEN=ows-token:latest,OPENAI_API_KEY=openai-api-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_CHAT_ID=telegram-chat-id:latest
