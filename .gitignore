@@ -1,0 +1,7 @@
+.env
+.env.local
+data/
+*.db
+*.exe
+bin/
+dist/
