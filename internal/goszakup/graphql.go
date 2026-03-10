@@ -701,20 +701,25 @@ func parseLotDocuments(node map[string]any) []model.DocumentRef {
 			continue
 		}
 
-		name := firstNonEmpty(
-			getStringAny(f, "originalName"),
+		docName := firstNonEmpty(
 			getStringAny(f, "nameRu"),
 			getStringAny(f, "nameKz"),
 		)
-		if strings.TrimSpace(name) == "" {
-			name = "document"
+		if strings.TrimSpace(docName) == "" {
+			docName = getStringAny(f, "originalName")
+		}
+
+		filename := getStringAny(f, "originalName")
+		mimeName := filename
+		if strings.TrimSpace(mimeName) == "" {
+			mimeName = docName
 		}
 
 		out = append(out, model.DocumentRef{
 			ID:       getStringAny(f, "id"),
-			Name:     name,
+			Name:     docName,
 			URL:      buildFileURL(filePath),
-			MIMEType: mimeFromFilename(name),
+			MIMEType: mimeFromFilename(mimeName),
 		})
 	}
 	return out
