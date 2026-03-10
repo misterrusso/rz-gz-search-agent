@@ -1,4 +1,6 @@
-﻿package service
+﻿//internal/service/checker.go
+
+package service
 
 import (
 	"context"
@@ -51,6 +53,7 @@ func NewCheckerService(
 func (s *CheckerService) RunCheck(ctx context.Context) model.CheckRunResult {
 	now := time.Now().UTC()
 	from := now.Add(-time.Duration(s.cfg.SearchWindowMinutes) * time.Minute)
+
 	result := model.CheckRunResult{
 		OK:          true,
 		CheckedFrom: from,
@@ -63,14 +66,21 @@ func (s *CheckerService) RunCheck(ctx context.Context) model.CheckRunResult {
 	cancel()
 	if err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{Stage: "search_lots", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			Stage: "search_lots",
+			Error: err.Error(),
+		})
 		return result
 	}
+
 	result.FoundLots = len(lots)
 
 	for _, lot := range lots {
 		if strings.TrimSpace(lot.ID) == "" {
-			result.Errors = append(result.Errors, model.LotError{Stage: "validate_lot", Error: "lot has empty ID"})
+			result.Errors = append(result.Errors, model.LotError{
+				Stage: "validate_lot",
+				Error: "lot has empty ID",
+			})
 			result.OK = false
 			continue
 		}
@@ -78,6 +88,7 @@ func (s *CheckerService) RunCheck(ctx context.Context) model.CheckRunResult {
 			s.logger.Error("lot processing failed", "lot_id", lot.ID, "error", err.Error())
 		}
 	}
+
 	return result
 }
 
@@ -85,7 +96,11 @@ func (s *CheckerService) processLot(ctx context.Context, lot model.Lot, result *
 	processed, err := s.stateStore.IsProcessed(ctx, lot.ID)
 	if err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "dedup_check", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "dedup_check",
+			Error: err.Error(),
+		})
 		return err
 	}
 	if processed {
@@ -98,21 +113,27 @@ func (s *CheckerService) processLot(ctx context.Context, lot model.Lot, result *
 	cancel()
 	if err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "get_documents", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "get_documents",
+			Error: err.Error(),
+		})
 		return err
 	}
-	spec, ok := filter.SelectBestSpecDocument(docs)
+
+	spec, ok := selectTechnicalSpecificationOnly(docs)
 	if !ok {
-		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "select_spec", Error: "no supported document found"})
-		return fmt.Errorf("no supported document for lot=%s", lot.ID)
+		s.logger.Info("technical specification not found, skipping lot", "lot_id", lot.ID)
+		return nil
 	}
 
 	var docData []byte
 	var docMIME string
+
 	err = util.Retry(ctx, 3, 800*time.Millisecond, func() error {
 		downloadCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.HTTPTimeoutSeconds)*time.Second)
 		defer cancel()
+
 		b, mime, err := s.ows.DownloadDocument(downloadCtx, spec)
 		if err != nil {
 			return err
@@ -123,14 +144,22 @@ func (s *CheckerService) processLot(ctx context.Context, lot model.Lot, result *
 	})
 	if err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "download_document", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "download_document",
+			Error: err.Error(),
+		})
 		return err
 	}
 
 	text, err := files.ExtractText(ctx, spec.Name, docMIME, docData)
 	if err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "extract_text", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "extract_text",
+			Error: err.Error(),
+		})
 		return err
 	}
 	text = s.truncateTextIfNeeded(lot.ID, text)
@@ -145,48 +174,124 @@ func (s *CheckerService) processLot(ctx context.Context, lot model.Lot, result *
 	cancel()
 	if err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "classify", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "classify",
+			Error: err.Error(),
+		})
 		return err
 	}
 
 	if err := s.stateStore.MarkChecked(ctx, lot.ID, spec.ID, spec.URL, time.Now().UTC()); err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "state_mark_checked", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "state_mark_checked",
+			Error: err.Error(),
+		})
 	}
 	if err := s.stateStore.SaveVerdict(ctx, lot.ID, classification.IsTranslationRelated, classification.Confidence, classification.Reason); err != nil {
 		result.OK = false
-		result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "state_save_verdict", Error: err.Error()})
+		result.Errors = append(result.Errors, model.LotError{
+			LotID: lot.ID,
+			Stage: "state_save_verdict",
+			Error: err.Error(),
+		})
 	}
 
 	result.ProcessedLots++
+
 	if classification.IsTranslationRelated && classification.Confidence >= 0.60 {
 		msg := formatTelegramMessage(lot, classification)
+
 		sendCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.HTTPTimeoutSeconds)*time.Second)
 		errMsg := s.telegram.SendMessage(sendCtx, msg)
 		cancel()
 		if errMsg != nil {
 			result.OK = false
-			result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "telegram_message", Error: errMsg.Error()})
+			result.Errors = append(result.Errors, model.LotError{
+				LotID: lot.ID,
+				Stage: "telegram_message",
+				Error: errMsg.Error(),
+			})
 			return errMsg
 		}
 
 		sendDocCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.HTTPTimeoutSeconds)*time.Second)
-		errDoc := s.telegram.SendDocument(sendDocCtx, safeFilename(spec.Name, spec.ID), docData, "Lot specification")
+		errDoc := s.telegram.SendDocument(sendDocCtx, safeFilename(spec.Name, spec.ID), docData, "Technical specification")
 		cancel()
 		if errDoc != nil {
 			result.OK = false
-			result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "telegram_document", Error: errDoc.Error()})
+			result.Errors = append(result.Errors, model.LotError{
+				LotID: lot.ID,
+				Stage: "telegram_document",
+				Error: errDoc.Error(),
+			})
 			return errDoc
 		}
 
 		if err := s.stateStore.MarkSent(ctx, lot.ID, time.Now().UTC()); err != nil {
 			result.OK = false
-			result.Errors = append(result.Errors, model.LotError{LotID: lot.ID, Stage: "state_mark_sent", Error: err.Error()})
+			result.Errors = append(result.Errors, model.LotError{
+				LotID: lot.ID,
+				Stage: "state_mark_sent",
+				Error: err.Error(),
+			})
 		}
 		result.SentToTelegram++
 	}
 
 	return nil
+}
+
+func selectTechnicalSpecificationOnly(docs []model.DocumentRef) (model.DocumentRef, bool) {
+	if len(docs) == 0 {
+		return model.DocumentRef{}, false
+	}
+
+	if spec, ok := filter.SelectBestSpecDocument(docs); ok && isTechnicalSpecificationName(spec.Name) {
+		return spec, true
+	}
+
+	for _, doc := range docs {
+		if isTechnicalSpecificationName(doc.Name) {
+			return doc, true
+		}
+	}
+
+	return model.DocumentRef{}, false
+}
+
+func isTechnicalSpecificationName(name string) bool {
+	n := normalizeDocumentName(name)
+	if n == "" {
+		return false
+	}
+
+	positive := []string{
+		"техническая спецификация",
+		"тех спецификация",
+		"техспецификация",
+		"тех. спецификация",
+		"technical specification",
+	}
+
+	for _, token := range positive {
+		if strings.Contains(n, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeDocumentName(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.ReplaceAll(n, "_", " ")
+	n = strings.ReplaceAll(n, "-", " ")
+	for strings.Contains(n, "  ") {
+		n = strings.ReplaceAll(n, "  ", " ")
+	}
+	return n
 }
 
 func (s *CheckerService) truncateTextIfNeeded(lotID string, text string) string {
@@ -209,6 +314,7 @@ func formatTelegramMessage(l model.Lot, cls model.ClassificationResult) string {
 	if amountCurrency == "" {
 		amountCurrency = "KZT"
 	}
+
 	return fmt.Sprintf(
 		"Relevant lot found\n\nLot ID: %s\nLot number: %s\nName: %s\nDescription: %s\nCustomer: %s\nTrdBuy number: %s\nTrdBuy ID: %s\nAmount: %.2f %s\nLast update: %s\nURL: %s\nMatched keywords: %s\nConfidence: %.2f\nAI summary: %s",
 		l.ID,

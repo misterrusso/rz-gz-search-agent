@@ -1,3 +1,5 @@
+//internal/goszakup/graphql_test.go
+
 package goszakup
 
 import (
