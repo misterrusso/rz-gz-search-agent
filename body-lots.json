@@ -1,0 +1,1 @@
+{"query":"query SearchLots($limit: Int, $after: Int, $filter: LotsFiltersInput) { Lots(filter: $filter, limit: $limit, after: $after) { id lotNumber nameRu descriptionRu customerNameRu trdBuyNumberAnno trdBuyId amount lastUpdateDate } }","variables":{"filter":{"nameDescriptionRu":"перевод"},"limit":20,"after":0}}

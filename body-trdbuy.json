@@ -1,0 +1,10 @@
+﻿{
+  "query": "query SearchTrdBuy($limit: Int, $after: Int, $filter: TrdBuyFiltersInput) { TrdBuy(filter: $filter, limit: $limit, after: $after) { id numberAnno nameRu nameKz totalSum publishDate customerNameRu orgNameRu } }",
+  "variables": {
+    "limit": 10,
+    "after": 0,
+    "filter": {
+      "refBuyStatusId": [210, 220]
+    }
+  }
+}
