@@ -23,46 +23,34 @@ const (
 	queryModeNormal  = "normal"
 	queryModeMinimal = "minimal"
 
-	graphqlSearchLotsQuery = `
-query SearchLots($limit: Int, $after: Int, $filter: LotsFiltersInput) {
-  Lots(filter: $filter, limit: $limit, after: $after) {
+	graphqlSearchTrdBuyQuery = `
+query SearchTrdBuy($limit: Int, $after: Int, $filter: TrdBuyFiltersInput) {
+  TrdBuy(filter: $filter, limit: $limit, after: $after) {
     id
-    lotNumber
+    numberAnno
     nameRu
-    descriptionRu
     customerNameRu
-    trdBuyNumberAnno
-    trdBuyId
-    amount
-    lastUpdateDate
-    refLotStatusId
-    RefLotsStatus {
+    publishDate
+    refBuyStatusId
+    RefBuyStatus {
       id
       code
-      nameRu
-      nameKz
-    }
-    Files {
-      id
-      filePath
-      originalName
       nameRu
       nameKz
     }
   }
 }`
 
-	graphqlSearchLotsMinimalQuery = `
-query SearchLotsMinimal($limit: Int) {
-  Lots(limit: $limit) {
+	graphqlSearchTrdBuyMinimalQuery = `
+query SearchTrdBuyMinimal($limit: Int) {
+  TrdBuy(limit: $limit) {
     id
+    numberAnno
     nameRu
-    descriptionRu
     customerNameRu
-    amount
-    lastUpdateDate
-    refLotStatusId
-    RefLotsStatus {
+    publishDate
+    refBuyStatusId
+    RefBuyStatus {
       id
       code
       nameRu
@@ -108,10 +96,12 @@ var (
 		"устный перевод",
 		"нотариальный перевод",
 		"локализац",
+		"перевод",
+		"переводчес",
 	}
-	allowedStatusCodes = map[string]struct{}{
+	allowedAnnouncementStatusCodes = map[string]struct{}{
 		"Published":            {},
-		"PublishedOfferAccept": {},
+		"PublishedPriceOffers": {},
 		"PublishedBidAccept":   {},
 		"PublishedBidAdditional": {},
 		"PublishedAuction":     {},
@@ -183,21 +173,21 @@ func (g *GraphQLClient) SearchLots(ctx context.Context, keywords []string, from 
 	}
 
 	if g.queryMode == queryModeMinimal {
-		return g.searchLotsMinimal(ctx, from, to, maxResults)
+		return g.searchAnnouncementsMinimal(ctx, from, to, maxResults)
 	}
-	return g.searchLotsByKeywords(ctx, queryKeywords, from, to, maxResults)
+	return g.searchAnnouncementsByKeywords(ctx, queryKeywords, from, to, maxResults)
 }
 
-func (g *GraphQLClient) searchLotsMinimal(ctx context.Context, from time.Time, to time.Time, maxResults int) ([]model.Lot, error) {
+func (g *GraphQLClient) searchAnnouncementsMinimal(ctx context.Context, from time.Time, to time.Time, maxResults int) ([]model.Lot, error) {
 	const pageLimit = 20
 
 	vars := map[string]any{"limit": pageLimit}
-	page, statusByLotID, pageInfo, err := g.queryLotsPage(ctx, "SearchLotsMinimal", "Lots", graphqlSearchLotsMinimalQuery, vars)
+	page, statusByID, pageInfo, err := g.queryTrdBuyPage(ctx, "SearchTrdBuyMinimal", "TrdBuy", graphqlSearchTrdBuyMinimalQuery, vars)
 	if err != nil {
 		return nil, err
 	}
 
-	g.logger.Info("ows lots page",
+	g.logger.Info("ows announcements page",
 		"mode", queryModeMinimal,
 		"results", len(page),
 		"has_next_page", pageInfo.HasNextPage,
@@ -205,18 +195,18 @@ func (g *GraphQLClient) searchLotsMinimal(ctx context.Context, from time.Time, t
 	)
 
 	filtered := make([]model.Lot, 0, len(page))
-	for _, lot := range page {
-		if !isAllowedStatusCode(statusByLotID[lot.ID]) {
+	for _, item := range page {
+		if !isAllowedAnnouncementStatusCode(statusByID[item.ID]) {
 			continue
 		}
-		if isBlacklistedLot(lot) || !isRelevantTranslationLot(lot) {
+		if isBlacklistedLot(item) || !isRelevantAnnouncement(item) {
 			continue
 		}
-		if !withinWindow(lot.PublishedAt, from, to) {
+		if !withinWindow(item.PublishedAt, from, to) {
 			continue
 		}
-		filtered = append(filtered, lot)
-		g.cacheLotText(lot)
+		filtered = append(filtered, item)
+		g.cacheLotText(item)
 		if len(filtered) >= maxResults {
 			break
 		}
@@ -224,7 +214,7 @@ func (g *GraphQLClient) searchLotsMinimal(ctx context.Context, from time.Time, t
 	return filtered, nil
 }
 
-func (g *GraphQLClient) searchLotsByKeywords(ctx context.Context, keywords []string, from time.Time, to time.Time, maxResults int) ([]model.Lot, error) {
+func (g *GraphQLClient) searchAnnouncementsByKeywords(ctx context.Context, keywords []string, from time.Time, to time.Time, maxResults int) ([]model.Lot, error) {
 	const (
 		pageLimit = 20
 		maxPages  = 50
@@ -240,52 +230,52 @@ func (g *GraphQLClient) searchLotsByKeywords(ctx context.Context, keywords []str
 			vars := map[string]any{
 				"limit": pageLimit,
 				"after": after,
-				"filter": map[string]any{
-					"nameDescriptionRu": keyword,
-				},
 			}
 
-			pageLots, statusByLotID, pageInfo, err := g.queryLotsPage(ctx, "SearchLots", "Lots", graphqlSearchLotsQuery, vars)
+			pageItems, statusByID, pageInfo, err := g.queryTrdBuyPage(ctx, "SearchTrdBuy", "TrdBuy", graphqlSearchTrdBuyQuery, vars)
 			if err != nil {
 				return nil, err
 			}
 
-			g.logger.Info("ows keyword page",
+			g.logger.Info("ows announcement keyword page",
 				"keyword", keyword,
 				"page", pageNum,
-				"results", len(pageLots),
+				"results", len(pageItems),
 				"last_id", pageInfo.LastID,
 				"has_next_page", pageInfo.HasNextPage,
 			)
 
 			filteredCount := 0
-			for _, lot := range pageLots {
-				if !isAllowedStatusCode(statusByLotID[lot.ID]) {
+			for _, item := range pageItems {
+				if !isAllowedAnnouncementStatusCode(statusByID[item.ID]) {
 					continue
 				}
-				if isBlacklistedLot(lot) || !isRelevantTranslationLot(lot) {
+				if isBlacklistedLot(item) || !isRelevantAnnouncement(item) {
 					continue
 				}
-				if !withinWindow(lot.PublishedAt, from, to) {
+				if !announcementContainsKeyword(item, keyword) {
+					continue
+				}
+				if !withinWindow(item.PublishedAt, from, to) {
 					continue
 				}
 
 				filteredCount++
 
-				entry, exists := collected[lot.ID]
+				entry, exists := collected[item.ID]
 				if !exists {
-					copyLot := lot
+					copyItem := item
 					entry = &matchedLot{
-						lot:     copyLot,
+						lot:     copyItem,
 						matched: map[string]struct{}{},
 					}
-					collected[lot.ID] = entry
-					g.cacheLotText(lot)
+					collected[item.ID] = entry
+					g.cacheLotText(item)
 				}
 				entry.matched[keyword] = struct{}{}
 			}
 
-			g.logger.Info("ows keyword page filtered",
+			g.logger.Info("ows announcement keyword page filtered",
 				"keyword", keyword,
 				"filtered", filteredCount,
 				"dedup_total", len(collected),
@@ -314,15 +304,14 @@ func (g *GraphQLClient) searchLotsByKeywords(ctx context.Context, keywords []str
 		}
 	}
 
-	lots := finalizeMatchedLots(collected, maxResults)
-	if len(lots) == 0 {
-		return lots, nil
+	items := finalizeMatchedLots(collected, maxResults)
+	if len(items) == 0 {
+		return items, nil
 	}
-
-	if len(lots) > maxResults {
-		lots = lots[:maxResults]
+	if len(items) > maxResults {
+		items = items[:maxResults]
 	}
-	return lots, nil
+	return items, nil
 }
 
 func finalizeMatchedLots(collected map[string]*matchedLot, maxResults int) []model.Lot {
@@ -346,8 +335,8 @@ func finalizeMatchedLots(collected map[string]*matchedLot, maxResults int) []mod
 	return out
 }
 
-func isAllowedStatusCode(code string) bool {
-	_, ok := allowedStatusCodes[strings.TrimSpace(code)]
+func isAllowedAnnouncementStatusCode(code string) bool {
+	_, ok := allowedAnnouncementStatusCodes[strings.TrimSpace(code)]
 	return ok
 }
 
@@ -364,23 +353,19 @@ func withinWindow(t time.Time, from time.Time, to time.Time) bool {
 	return true
 }
 
-func (g *GraphQLClient) queryLotsPage(ctx context.Context, operationName, rootField, query string, variables map[string]any) ([]model.Lot, map[string]string, gqlPageInfo, error) {
+func (g *GraphQLClient) queryTrdBuyPage(ctx context.Context, operationName, rootField, query string, variables map[string]any) ([]model.Lot, map[string]string, gqlPageInfo, error) {
 	envelope, err := g.queryEnvelope(ctx, operationName, rootField, query, variables)
 	if err != nil {
 		return nil, nil, gqlPageInfo{}, err
 	}
 
-	lots, docsByLotID, statusByLotID, err := parseLotsFromData(envelope.Data)
+	items, statusByID, err := parseTrdBuyFromData(envelope.Data)
 	if err != nil {
-		return nil, nil, gqlPageInfo{}, fmt.Errorf("parse lots: %w", err)
-	}
-
-	for lotID, docs := range docsByLotID {
-		g.cacheLotDocuments(lotID, docs)
+		return nil, nil, gqlPageInfo{}, fmt.Errorf("parse trdbuy: %w", err)
 	}
 
 	pageInfo := parsePageInfo(envelope.Extensions)
-	return lots, statusByLotID, pageInfo, nil
+	return items, statusByID, pageInfo, nil
 }
 
 func (g *GraphQLClient) GetLotDocuments(_ context.Context, lotID string) ([]model.DocumentRef, error) {
@@ -494,24 +479,23 @@ func (g *GraphQLClient) queryEnvelope(ctx context.Context, operationName, rootFi
 	return envelope, nil
 }
 
-func parseLotsFromData(data map[string]any) ([]model.Lot, map[string][]model.DocumentRef, map[string]string, error) {
-	rawLots, ok := data["Lots"]
+func parseTrdBuyFromData(data map[string]any) ([]model.Lot, map[string]string, error) {
+	rawItems, ok := data["TrdBuy"]
 	if !ok {
-		return nil, nil, nil, errorsf("response data has no Lots field")
+		return nil, nil, errorsf("response data has no TrdBuy field")
 	}
 
-	if rawLots == nil {
-		return []model.Lot{}, map[string][]model.DocumentRef{}, map[string]string{}, nil
+	if rawItems == nil {
+		return []model.Lot{}, map[string]string{}, nil
 	}
 
-	items, ok := rawLots.([]any)
+	items, ok := rawItems.([]any)
 	if !ok {
-		return nil, nil, nil, errorsf("Lots field has unexpected type %T", rawLots)
+		return nil, nil, errorsf("TrdBuy field has unexpected type %T", rawItems)
 	}
 
 	out := make([]model.Lot, 0, len(items))
-	docsByLotID := make(map[string][]model.DocumentRef)
-	statusByLotID := make(map[string]string, len(items))
+	statusByID := make(map[string]string, len(items))
 
 	for _, item := range items {
 		node, ok := item.(map[string]any)
@@ -525,87 +509,39 @@ func parseLotsFromData(data map[string]any) ([]model.Lot, map[string][]model.Doc
 		}
 
 		nameRu := getStringAny(node, "nameRu")
-		descriptionRu := getStringAny(node, "descriptionRu")
 		customerNameRu := getStringAny(node, "customerNameRu")
-		amount := getFloatAny(node, "amount")
-		lastUpdate := getStringAny(node, "lastUpdateDate")
+		publishDate := getStringAny(node, "publishDate")
+		numberAnno := getStringAny(node, "numberAnno")
 
-		lot := model.Lot{
+		announcement := model.Lot{
 			ID:               id,
-			Title:            firstNonEmpty(nameRu, getStringAny(node, "name")),
-			Customer:         firstNonEmpty(customerNameRu, getStringAny(node, "customerName")),
-			Amount:           amount,
+			Title:            nameRu,
+			Customer:         customerNameRu,
+			Amount:           0,
 			Currency:         "KZT",
-			URL:              buildLotURL(getStringAny(node, "trdBuyId"), id),
-			PublishedAt:      parseTimeAny(lastUpdate),
-			LotNumber:        getStringAny(node, "lotNumber"),
+			URL:              buildAnnouncementURL(id),
+			PublishedAt:      parseTimeAny(publishDate),
+			LotNumber:        numberAnno,
 			NameRu:           nameRu,
-			DescriptionRu:    descriptionRu,
+			DescriptionRu:    "",
 			CustomerNameRu:   customerNameRu,
-			TrdBuyNumberAnno: getStringAny(node, "trdBuyNumberAnno"),
-			TrdBuyID:         getStringAny(node, "trdBuyId"),
-			LastUpdateDate:   lastUpdate,
+			TrdBuyNumberAnno: numberAnno,
+			TrdBuyID:         id,
+			LastUpdateDate:   publishDate,
 		}
 
-		if lot.Title == "" {
-			lot.Title = descriptionRu
+		if announcement.Title == "" {
+			announcement.Title = numberAnno
 		}
 
-		if ref, ok := node["RefLotsStatus"].(map[string]any); ok {
-			statusByLotID[id] = getStringAny(ref, "code")
+		if ref, ok := node["RefBuyStatus"].(map[string]any); ok {
+			statusByID[id] = getStringAny(ref, "code")
 		}
 
-		docs := parseLotDocuments(node)
-		if len(docs) > 0 {
-			docsByLotID[id] = docs
-		}
-
-		out = append(out, lot)
+		out = append(out, announcement)
 	}
 
-	return out, docsByLotID, statusByLotID, nil
-}
-
-func parseLotDocuments(node map[string]any) []model.DocumentRef {
-	raw, ok := node["Files"].([]any)
-	if !ok || len(raw) == 0 {
-		return nil
-	}
-
-	out := make([]model.DocumentRef, 0, len(raw))
-	for _, item := range raw {
-		f, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		filePath := getStringAny(f, "filePath")
-		if strings.TrimSpace(filePath) == "" {
-			continue
-		}
-
-		docName := firstNonEmpty(
-			getStringAny(f, "nameRu"),
-			getStringAny(f, "nameKz"),
-		)
-		if strings.TrimSpace(docName) == "" {
-			docName = getStringAny(f, "originalName")
-		}
-
-		filename := getStringAny(f, "originalName")
-		mimeName := filename
-		if strings.TrimSpace(mimeName) == "" {
-			mimeName = docName
-		}
-
-		out = append(out, model.DocumentRef{
-			ID:       getStringAny(f, "id"),
-			Name:     docName,
-			URL:      buildFileURL(filePath),
-			MIMEType: mimeFromFilename(mimeName),
-		})
-	}
-	return out
+	return out, statusByID, nil
 }
 
 func parsePageInfo(extensions map[string]any) gqlPageInfo {
@@ -642,14 +578,23 @@ func isBlacklistedLot(lot model.Lot) bool {
 	return false
 }
 
-func isRelevantTranslationLot(lot model.Lot) bool {
-	text := strings.ToLower(lot.NameRu + " " + lot.DescriptionRu + " " + lot.Title)
+func isRelevantAnnouncement(item model.Lot) bool {
+	text := strings.ToLower(strings.TrimSpace(item.NameRu + " " + item.Title))
 	for _, token := range relevanceTokens {
 		if strings.Contains(text, token) {
 			return true
 		}
 	}
 	return false
+}
+
+func announcementContainsKeyword(item model.Lot, keyword string) bool {
+	k := strings.ToLower(strings.TrimSpace(keyword))
+	if k == "" {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(item.NameRu + " " + item.Title))
+	return strings.Contains(text, k)
 }
 
 func normalizeKeywords(keywords []string) []string {
@@ -671,15 +616,12 @@ func normalizeKeywords(keywords []string) []string {
 	return out
 }
 
-func buildLotURL(trdBuyID, lotID string) string {
+func buildAnnouncementURL(trdBuyID string) string {
 	id := strings.TrimSpace(trdBuyID)
-	if id != "" {
-		return "https://goszakup.gov.kz/ru/announce/index/" + id
-	}
-	if strings.TrimSpace(lotID) == "" {
+	if id == "" {
 		return ""
 	}
-	return "https://ows.goszakup.gov.kz/ru/lots/" + lotID
+	return "https://goszakup.gov.kz/ru/announce/index/" + id
 }
 
 func buildFileURL(filePath string) string {
