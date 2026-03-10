@@ -13,11 +13,12 @@ Local Go service for procurement checks: find lots, download spec files, extract
   - `sqlite` (primary local backend)
   - `memory`
 - OWS integration:
-  - GraphQL client against `POST https://ows.goszakup.gov.kz/v3/graphql`
-  - Main search object: `Lots`
-  - Keyword search via `filter.nameDescriptionRu`
-  - Pagination via `extensions.pageInfo.hasNextPage/lastId`
-  - Dedup by lot id + blacklist/relevance filtering for translation services
+  - Primary source: portal HTML search `GET https://goszakup.gov.kz/ru/search/announce`
+  - Query params: `filter[name]`, `filter[status][]`, `count_record=50`, `page`
+  - Pagination and parsing from `#search-result tbody tr` with total count extraction
+  - Blacklist/relevance filtering for translation services before classifier
+  - OpenAI validation after search filtering, then Telegram notification for relevant announcements
+  - GraphQL client is kept in codebase but is no longer the primary source
   - Explicit provider mode via `GOSZAKUP_MODE=fake|real` (default `real`)
   - No automatic fallback to fake in `real` mode
 - File support:
@@ -71,12 +72,12 @@ curl -X POST http://localhost:8080/jobs/check
 
 ## OWS Integration Assumptions
 
-MVP uses OWS v3 GraphQL in `internal/goszakup/graphql.go`.
+Current production-oriented search uses portal HTML parsing in `internal/goszakup/portal_search.go`.
 
 - Query templates:
-  - `Lots(filter: { nameDescriptionRu }, limit, after)` for procurement search
-  - In `OWS_QUERY_MODE=minimal`, search uses `Lots(limit: $limit) { id nameRu descriptionRu ... }`
-  - Headers: `Authorization: Bearer <OWS_TOKEN>`, `Content-Type: application/json; charset=utf-8`
+  - `GET /ru/search/announce?filter[name]=...&filter[status][]=...&count_record=50&page=N`
+  - Parsed fields: announce number/id/title/organizer/method/dates/amount/status/url
+  - Document links are extracted from announce page anchors and added to Telegram message when found
 
 ## MVP Limits
 

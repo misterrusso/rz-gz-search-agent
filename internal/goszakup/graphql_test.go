@@ -1,5 +1,3 @@
-//internal/goszakup/graphql_test.go
-
 package goszakup
 
 import (
@@ -8,26 +6,25 @@ import (
 	"rz_gz_search_agent/internal/model"
 )
 
-func TestParseLotsFromData(t *testing.T) {
+func TestParseTrdBuyFromData(t *testing.T) {
 	data := map[string]any{
-		"Lots": []any{
+		"TrdBuy": []any{
 			map[string]any{
-				"id":               7079567,
-				"lotNumber":        "22465767-ЗЦПнеГЗ1",
-				"nameRu":           "Услуги по письменному переводу",
-				"descriptionRu":    "Перевод документов",
-				"customerNameRu":   "АО Тест",
-				"trdBuyNumberAnno": "3090163-1",
-				"trdBuyId":         3090163,
-				"amount":           150000,
-				"lastUpdateDate":   "2019-02-10 21:53:23",
+				"id":             7079567,
+				"numberAnno":     "22465767-TEST-1",
+				"nameRu":         "Услуги по письменному переводу",
+				"customerNameRu": "АО Тест",
+				"publishDate":    "2019-02-10 21:53:23",
+				"RefBuyStatus": map[string]any{
+					"code": "PublishedPriceOffers",
+				},
 			},
 		},
 	}
 
-	lots, err := parseLotsFromData(data)
+	lots, statusByID, err := parseTrdBuyFromData(data)
 	if err != nil {
-		t.Fatalf("parseLotsFromData() error: %v", err)
+		t.Fatalf("parseTrdBuyFromData() error: %v", err)
 	}
 	if len(lots) != 1 {
 		t.Fatalf("unexpected lots count: %d", len(lots))
@@ -38,30 +35,30 @@ func TestParseLotsFromData(t *testing.T) {
 	if lots[0].NameRu != "Услуги по письменному переводу" {
 		t.Fatalf("unexpected name: %s", lots[0].NameRu)
 	}
-	if lots[0].TrdBuyID != "3090163" {
-		t.Fatalf("unexpected trdBuyId: %s", lots[0].TrdBuyID)
+	if statusByID["7079567"] != "PublishedPriceOffers" {
+		t.Fatalf("unexpected status code: %s", statusByID["7079567"])
 	}
 }
 
-func TestBlacklistFiltering(t *testing.T) {
-	bad := modelLot("Перевод стрелочный", "Работы по переводу стрелок")
+func TestBlacklistAndRelevanceFiltering(t *testing.T) {
+	bad := model.Lot{
+		NameRu:        "Перевод стрелочный",
+		DescriptionRu: "Работы по переводу стрелок",
+		Title:         "Перевод стрелочный",
+	}
 	if !isBlacklistedLot(bad) {
 		t.Fatal("expected blacklisted lot")
 	}
 
-	good := modelLot("Услуги по письменному переводу", "Перевод документов и локализация")
+	good := model.Lot{
+		NameRu:        "Услуги по письменному переводу",
+		DescriptionRu: "Перевод документов и локализация",
+		Title:         "Услуги по письменному переводу",
+	}
 	if isBlacklistedLot(good) {
 		t.Fatal("did not expect blacklist on relevant lot")
 	}
-	if !isRelevantTranslationLot(good) {
+	if !isRelevantAnnouncement(good) {
 		t.Fatal("expected relevant translation lot")
-	}
-}
-
-func modelLot(name, description string) model.Lot {
-	return model.Lot{
-		NameRu:        name,
-		DescriptionRu: description,
-		Title:         name,
 	}
 }

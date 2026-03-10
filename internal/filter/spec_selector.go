@@ -33,7 +33,7 @@ func SelectBestSpecDocument(docs []model.DocumentRef) (model.DocumentRef, bool) 
 			}
 		}
 		ext := strings.ToLower(filepath.Ext(name))
-		if ext == ".docx" || ext == ".pdf" {
+		if ext == ".docx" || ext == ".pdf" || ext == ".txt" {
 			score += 2
 		}
 		if strings.Contains(name, "spec") || strings.Contains(name, "тех") {
@@ -58,7 +58,8 @@ func isSupported(d model.DocumentRef) bool {
 	mime := strings.ToLower(strings.TrimSpace(d.MIMEType))
 	return strings.HasSuffix(name, ".pdf") ||
 		strings.HasSuffix(name, ".docx") ||
+		strings.HasSuffix(name, ".txt") ||
 		strings.Contains(mime, "pdf") ||
-		strings.Contains(mime, "wordprocessingml.document")
+		strings.Contains(mime, "wordprocessingml.document") ||
+		strings.Contains(mime, "text/plain")
 }
-

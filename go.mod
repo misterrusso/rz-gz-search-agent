@@ -3,6 +3,7 @@ module rz_gz_search_agent
 go 1.24.1
 
 require (
+	github.com/PuerkitoBio/goquery v0.0.0
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	modernc.org/sqlite v1.33.1
 )
@@ -22,3 +23,5 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace github.com/PuerkitoBio/goquery => ./third_party/goquery

@@ -18,6 +18,11 @@ type Lot struct {
 	TrdBuyNumberAnno string    `json:"trd_buy_number_anno,omitempty"`
 	TrdBuyID         string    `json:"trd_buy_id,omitempty"`
 	LastUpdateDate   string    `json:"last_update_date,omitempty"`
+	Method           string    `json:"method,omitempty"`
+	StartDateTime    string    `json:"start_date_time,omitempty"`
+	EndDateTime      string    `json:"end_date_time,omitempty"`
+	StatusText       string    `json:"status_text,omitempty"`
+	DocumentURLs     []string  `json:"document_urls,omitempty"`
 	StatusCode       string    `json:"status_code,omitempty"`
 	StatusNameRu     string    `json:"status_name_ru,omitempty"`
 	MatchedKeywords  []string  `json:"matched_keywords,omitempty"`
