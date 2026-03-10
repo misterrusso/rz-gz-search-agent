@@ -13,7 +13,11 @@ Local Go service for procurement checks: find lots, download spec files, extract
   - `sqlite` (primary local backend)
   - `memory`
 - OWS integration:
-  - GraphQL client with flexible response parsing
+  - GraphQL client against `POST https://ows.goszakup.gov.kz/v3/graphql`
+  - Main search object: `Lots`
+  - Keyword search via `filter.nameDescriptionRu`
+  - Pagination via `extensions.pageInfo.hasNextPage/lastId`
+  - Dedup by lot id + blacklist/relevance filtering for translation services
   - Explicit provider mode via `GOSZAKUP_MODE=fake|real` (default `real`)
   - No automatic fallback to fake in `real` mode
 - File support:
@@ -67,17 +71,12 @@ curl -X POST http://localhost:8080/jobs/check
 
 ## OWS Integration Assumptions
 
-MVP includes placeholder GraphQL templates and flexible parsing in `internal/goszakup/graphql.go`.
+MVP uses OWS v3 GraphQL in `internal/goszakup/graphql.go`.
 
 - Query templates:
-  - `TrdBuy(filter, limit, after)` for procurement search
-  - `Lots(filter, limit, after)` for document lookup
-- In `OWS_QUERY_MODE=minimal`, search uses minimal query `TrdBuy(limit: $limit) { id }`.
-- `TODO` is used only where exact OWS schema is required.
-- Before connecting to a real OWS instance, adapt:
-  - query names and field names
-  - auth headers
-  - lot/document mapping logic
+  - `Lots(filter: { nameDescriptionRu }, limit, after)` for procurement search
+  - In `OWS_QUERY_MODE=minimal`, search uses `Lots(limit: $limit) { id nameRu descriptionRu ... }`
+  - Headers: `Authorization: Bearer <OWS_TOKEN>`, `Content-Type: application/json; charset=utf-8`
 
 ## MVP Limits
 

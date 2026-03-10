@@ -3,13 +3,21 @@ package model
 import "time"
 
 type Lot struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Customer    string    `json:"customer"`
-	Amount      float64   `json:"amount"`
-	Currency    string    `json:"currency"`
-	URL         string    `json:"url"`
-	PublishedAt time.Time `json:"published_at"`
+	ID               string    `json:"id"`
+	Title            string    `json:"title"`
+	Customer         string    `json:"customer"`
+	Amount           float64   `json:"amount"`
+	Currency         string    `json:"currency"`
+	URL              string    `json:"url"`
+	PublishedAt      time.Time `json:"published_at"`
+	LotNumber        string    `json:"lot_number,omitempty"`
+	NameRu           string    `json:"name_ru,omitempty"`
+	DescriptionRu    string    `json:"description_ru,omitempty"`
+	CustomerNameRu   string    `json:"customer_name_ru,omitempty"`
+	TrdBuyNumberAnno string    `json:"trd_buy_number_anno,omitempty"`
+	TrdBuyID         string    `json:"trd_buy_id,omitempty"`
+	LastUpdateDate   string    `json:"last_update_date,omitempty"`
+	MatchedKeywords  []string  `json:"matched_keywords,omitempty"`
 }
 
 type DocumentRef struct {
@@ -50,4 +58,3 @@ type CheckRunResult struct {
 	SkippedAsDuplicate int        `json:"skipped_as_duplicate"`
 	Errors             []LotError `json:"errors"`
 }
-

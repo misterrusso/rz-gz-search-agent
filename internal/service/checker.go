@@ -199,9 +199,32 @@ func (s *CheckerService) truncateTextIfNeeded(lotID string, text string) string 
 }
 
 func formatTelegramMessage(l model.Lot, cls model.ClassificationResult) string {
+	name := firstNonEmpty(l.NameRu, l.Title)
+	customer := firstNonEmpty(l.CustomerNameRu, l.Customer)
+	desc := strings.TrimSpace(l.DescriptionRu)
+	if len([]rune(desc)) > 280 {
+		desc = string([]rune(desc)[:280]) + "..."
+	}
+	amountCurrency := strings.TrimSpace(l.Currency)
+	if amountCurrency == "" {
+		amountCurrency = "KZT"
+	}
 	return fmt.Sprintf(
-		"Relevant lot found\n\nTitle: %s\nCustomer: %s\nAmount: %.2f %s\nURL: %s\nConfidence: %.2f\nAI summary: %s",
-		l.Title, l.Customer, l.Amount, l.Currency, l.URL, cls.Confidence, cls.Reason,
+		"Relevant lot found\n\nLot ID: %s\nLot number: %s\nName: %s\nDescription: %s\nCustomer: %s\nTrdBuy number: %s\nTrdBuy ID: %s\nAmount: %.2f %s\nLast update: %s\nURL: %s\nMatched keywords: %s\nConfidence: %.2f\nAI summary: %s",
+		l.ID,
+		l.LotNumber,
+		name,
+		desc,
+		customer,
+		l.TrdBuyNumberAnno,
+		l.TrdBuyID,
+		l.Amount,
+		amountCurrency,
+		l.LastUpdateDate,
+		l.URL,
+		strings.Join(l.MatchedKeywords, ", "),
+		cls.Confidence,
+		cls.Reason,
 	)
 }
 
@@ -211,4 +234,13 @@ func safeFilename(name, fallbackID string) string {
 		return fallbackID + ".bin"
 	}
 	return n
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
