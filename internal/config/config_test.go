@@ -8,15 +8,15 @@ import (
 )
 
 func TestParseKeywords(t *testing.T) {
-	got := ParseKeywords(" translation, Localization, ,translation, interpretation ")
-	want := []string{"translation", "localization", "interpretation"}
+	got := ParseKeywords(" услуги перевода,письменный перевод,перевод,нотариальный перевод,перевод документов,перевод текстов, аударма қызметтері,жазбаша аударма,ізбе-із аударма,құжаттарды аудару,мәтіндерді аудару, аудару, аударма ")
+	want := []string{"услуги перевода,письменный перевод,перевод,нотариальный перевод,перевод документов,перевод текстов, аударма қызметтері,жазбаша аударма,ізбе-із аударма,құжаттарды аудару,мәтіндерді аудару, аудару, аударма"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected keywords: got=%v want=%v", got, want)
 	}
 }
 
 func TestLoad(t *testing.T) {
-	t.Setenv("SEARCH_KEYWORDS", "translation, localization")
+	t.Setenv("SEARCH_KEYWORDS", "перевод, письменный перевод")
 	t.Setenv("STATE_BACKEND", "sqlite")
 	t.Setenv("PORT", "9090")
 	t.Setenv("OPENAI_MODEL", "")

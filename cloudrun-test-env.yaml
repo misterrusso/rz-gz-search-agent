@@ -8,6 +8,6 @@ OPENAI_MAX_TEXT_CHARS: "12000"
 TELEGRAM_ENABLED: "true"
 DRY_RUN: "false"
 OPENAI_MODEL: "gpt-4.1-mini"
-SEARCH_KEYWORDS: "translation,interpretation,localization"
+SEARCH_KEYWORDS=услуги перевода,письменный перевод,перевод,нотариальный перевод,перевод документов,перевод текстов, аударма қызметтері,жазбаша аударма,ізбе-із аударма,құжаттарды аудару,мәтіндерді аудару, аудару, аударма
 OWS_GRAPHQL_URL: "https://ows.goszakup.gov.kz/v3/graphql"
-OWS_QUERY_MODE: "minimal"
+OWS_QUERY_MODE: "normal"
