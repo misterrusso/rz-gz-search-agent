@@ -626,6 +626,10 @@ func parseLotsFromData(data map[string]any) ([]model.Lot, map[string][]model.Doc
 		return nil, nil, errorsf("response data has no Lots field")
 	}
 
+	if rawLots == nil {
+		return []model.Lot{}, map[string][]model.DocumentRef{}, nil
+	}
+
 	items, ok := rawLots.([]any)
 	if !ok {
 		return nil, nil, errorsf("Lots field has unexpected type %T", rawLots)
